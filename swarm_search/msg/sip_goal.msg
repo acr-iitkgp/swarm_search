@@ -1,0 +1,3 @@
+geometry_msgs/Vector3 sip_start
+geometry_msgs/Vector3 sip_end
+std_msgs/Bool takeoff_flag

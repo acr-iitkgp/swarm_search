@@ -1,0 +1,5 @@
+<launch>
+	
+  <node pkg="swarm_search" type="master_drone1" name="master_drone1" clear_params="true"/>
+
+</launch>

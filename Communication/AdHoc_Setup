@@ -1,0 +1,48 @@
+# Wi-Fi Ad-hoc Setup (Ubuntu 16.04/18.04)
+
+Ad-Hoc Mode in Wi-fi allows peer-to-peer communication between nodes in a network, 
+without the need of any fixed infrastructure like routers and access-points.
+this is essential for a decentralised swarm where no individual node/computer can cause failure of the whole system.
+
+VIMP: Not all USB Wifi adapters support Wifi Adhoc. Check the manufacturer datasheet to verify AdHoc support.
+
+Ad-Hoc mode is setup through the following instructions:
+
+1. Configure wireless interface by adding/modifying the following lines to /etc/networks/interfaces. 
+It is a good practice to make a backup of the original interfaces file and store ad-hoc settings in a separate file.
+
+	sudo cp /etc/network/interfaces /etc/networks/interfaces.orig
+	sudo nano /etc/network/interfaces.mesh
+
+Add these lines. Keep the all the parameters same except the address parameter on all devices. 
+Use the correct interface names which can be found by running 'ifconfig'
+IP address given to the Ad-Hoc interface of each Mesh-Networking device must belong to the same subnet.
+
+# interfaces(5) file used by ifup(8) and ifdown(8)
+# Include files from /etc/network/interfaces.d:
+source-directory /etc/network/interfaces.d
+
+auto lo
+iface lo inet loopback
+iface enp3s0 inet dhcp
+auto wlan0
+# wlan0 is the name of the Wireless Interface. For laptops, it can be found from ifconfig listing.
+iface wlan0 inet static
+  address 192.168.19.11
+  netmask 255.255.255.0
+  wireless-channel 1
+  wireless-essid MeshX
+  wireless-mode ad-hoc
+
+2. Restart the device
+  sudo reboot now
+
+3. Now the device is in Ad-Hoc mode. It cannot be reached by deviced connected to local Wi-Fi routers.
+It can now only be accessed by devices having the same Ad-hoc settings as this device. 
+
+Having same Cell-ID is very important for two devices to be able to reach other.
+Cell-ID can be seen by running:
+
+  iwconfig
+
+4. To Be Added: To Hard Code Cell-Id

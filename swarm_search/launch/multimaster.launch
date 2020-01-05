@@ -1,0 +1,17 @@
+<launch>
+	
+
+	<arg name="_mcast_group" default="224.0.0.1"/>
+	<arg name="_sync_topics" default=" '/test','master/drone1/ground_msg','/drone1/chatter','/drone0/mavros/global_position/global','/drone1/mavros/global_position/global','/drone2/mavros/global_position/global','/drone3/mavros/global_position/global','/drone0/mavros/state','/drone1/mavros/state','/drone2/mavros/state','/drone3/mavros/state' "/>
+
+	<node pkg="master_discovery_fkie" type="master_discovery" name="master_discovery" clear_params="true">
+		<param name="_mcast_group" value="$(arg _mcast_group)" />
+	</node>
+
+	<node pkg="master_sync_fkie" type="master_sync" name="master_sync">
+		<param name="_sync_topics" value="$(arg _sync_topics)" />
+	</node>
+
+
+
+</launch>

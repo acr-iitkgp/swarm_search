@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Geolocation</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <script src="https://static.robotwebtools.org/EventEmitter2/current/eventemitter2.min.js"></script>
+    <script src="./roslib.js"></script>
+    <script>
+      // Connecting to ROS
+      // -----------------
+      var ros = new ROSLIB.Ros();
+      // If there is an error on the backend, an 'error' emit will be emitted.
+      ros.on("error", function(error) {
+        document.getElementById("connecting").style.display = "none";
+        document.getElementById("connected").style.display = "none";
+        document.getElementById("closed").style.display = "none";
+        document.getElementById("error").style.display = "inline";
+        console.log(error);
+      });
+      // Find out exactly when we made a connection.
+      ros.on("connection", function() {
+        console.log("Connection made!");
+        document.getElementById("connecting").style.display = "none";
+        document.getElementById("error").style.display = "none";
+        document.getElementById("closed").style.display = "none";
+        document.getElementById("connected").style.display = "inline";
+      });
+      ros.on("close", function() {
+        console.log("Connection closed.");
+        document.getElementById("connecting").style.display = "none";
+        document.getElementById("connected").style.display = "none";
+        document.getElementById("closed").style.display = "inline";
+      });
+      // Create a connection to the rosbridge WebSocket server.
+      ros.connect("ws://localhost:9090");  
+
+    </script>
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 650px;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    
+    <div id="statusIndicator">
+      <p id="connecting">
+        Connecting to rosbridge...
+      </p>
+      <p id="connected" style="color:#00D600; display:none">
+        Connected
+      </p>
+      <p id="error" style="color:#FF0000; display:none">
+        Error in the backend!
+      </p>
+      <p id="closed" style="display:none">
+        Connection closed.
+      </p>
+    </div>
+    <div id="map"></div>
+    <p id="output"></p>
+    <script>
+      // Note: This example requires that you consent to location sharing when
+      // prompted by your browser. If you see the error "The Geolocation service
+      // failed.", it means you probably did not give permission for the browser to
+      // locate you.
+      var map, infoWindow;
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: 22.315826, lng: 87.309032},
+          zoom: 20
+        });
+        infoWindow = new google.maps.InfoWindow;
+
+        // Try HTML5 geolocation.
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+
+            infoWindow.setPosition(pos);
+            infoWindow.setContent('Location found.');
+            infoWindow.open(map);
+            map.setCenter(pos);
+          }, function() {
+            handleLocationError(true, infoWindow, map.getCenter());
+          });
+        } else {
+          // Browser doesn't support Geolocation
+          handleLocationError(false, infoWindow, map.getCenter());
+        }
+        var listener1 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone1/mavros/global_position/global',
+    messageType : 'sensor_msgs/NavSatFix'
+  });
+      listener1.subscribe(function(message) {
+        console.log('Drone1 at'  + ': [ ' +message.latitude+', '+message.longitude+']');
+        track_drone1(map,message.longitude,message.latitude);
+    });
+        var listener2 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone2/mavros/global_position/global',
+    messageType : 'sensor_msgs/NavSatFix'
+  });
+      listener2.subscribe(function(message) {
+        console.log('Drone2 at'  + ': [ ' +message.latitude+', '+message.longitude+']');
+        track_drone2(map,message.longitude,message.latitude);
+    });
+        var listener3 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone3/mavros/global_position/global',
+    messageType : 'sensor_msgs/NavSatFix'
+  });
+      listener3.subscribe(function(message) {
+        console.log('Drone3 at'  + ': [ ' +message.latitude+', '+message.longitude+']');
+        track_drone3(map,message.longitude,message.latitude);
+    });
+        var listener4 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone4/mavros/global_position/global',
+    messageType : 'sensor_msgs/NavSatFix'
+  });
+      listener4.subscribe(function(message) {
+        console.log('Drone4 at'  + ': [ ' +message.latitude+', '+message.longitude+']');
+        track_drone4(map,message.longitude,message.latitude);
+    });
+    var xy = [];
+      var listener6 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone1/listener',
+    messageType : 'geometry_msgs/Point'
+  });
+     listener6.subscribe(function(message) {
+        console.log("Received message on " + listener6.name +': [ ' +message.y+', '+message.x+']');
+      if ((xy.find(function(value){ 
+            if(((value[0]-message.y)<0.00001)&&((value[1]-message.x))<0.00001)
+                return 1;
+    }))==undefined)
+     {
+          print_point(map,message.y,message.x);
+          print_para(message.y,message.x);
+          xy.push(message.y,message.x);
+     }             
+    });
+          var listener7 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone2/listener',
+    messageType : 'geometry_msgs/Point'
+  });
+     listener7.subscribe(function(message) {
+        console.log("Received message on " + listener7.name +': [ ' +message.y+', '+message.x+']');
+      if ((xy.find(function(value){ 
+            if(((value[0]-message.y)<0.00001)&&((value[1]-message.x))<0.00001)
+                return 1;
+    }))==undefined)
+     {
+          print_point(map,message.y,message.x);
+          print_para(message.y,message.x);
+          xy.push(message.y,message.x);
+     }             
+    });
+              var listener8 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone3/listener',
+    messageType : 'geometry_msgs/Point'
+  });
+     listener8.subscribe(function(message) {
+        console.log("Received message on " + listener8.name +': [ ' +message.y+', '+message.x+']');
+      if ((xy.find(function(value){ 
+            if(((value[0]-message.y)<0.00001)&&((value[1]-message.x))<0.00001)
+                return 1;
+    }))==undefined)
+     {
+          print_point(map,message.y,message.x);
+          print_para(message.y,message.x);
+          xy.push(message.y,message.x);
+     } 
+            
+    });
+              var listener9 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/drone4/listener',
+    messageType : 'geometry_msgs/Point'
+  });
+     listener9.subscribe(function(message) {
+        console.log("Received message on " + listener9.name +': [ ' +message.y+', '+message.x+']');
+     if ((xy.find(function(value){ 
+            if(((value[0]-message.y)<0.00001)&&((value[1]-message.x))<0.00001)
+                return 1;
+    }))==undefined)
+     {
+          print_point(map,message.y,message.x);
+          print_para(message.y,message.x);
+            xy.push(message.y,message.x);
+     }           
+    });
+  /*    var listener5 = new ROSLIB.Topic({
+    ros : ros,
+    name : '/listener',
+    messageType : 'swarm_search/point_list'
+  });
+    var xy = [];
+      listener5.subscribe(function(message) {
+        console.log('Received message on ' + listener.name + ': array' );
+    if ((xy.find(function(value){ 
+            if(value[0]==message.data[0]&&value[1]==message.data[1])
+                return 1;
+    }))==undefined)
+     {
+        print_point(map,message.data[0],message.data[1]);
+      //  track_drone4(map,message.data[0],message.data[1]);
+       print_para(message.data[0],message.data[1]);
+        xy.push([message.data[0],message.data[1]]);
+    }
+    }); */
+        
+             
+     }
+
+      function handleLocationError(browserHasGeolocation, infoWindow, pos) {
+        infoWindow.setPosition(pos);
+        infoWindow.setContent(browserHasGeolocation ?
+                              'Error: The Geolocation service failed.' :
+                              'Error: Your browser doesn\'t support geolocation.');
+        infoWindow.open(map);
+
+      }
+    function print_point(map,lngg,latt){
+     var image = {
+          url: './point.png',
+          size: new google.maps.Size(23,23),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(12, 12)
+        };
+        var shape = {
+          coords: [1, 1, 1, 20, 18, 20, 18, 1],
+          type: 'poly'
+        };
+          var marker = new google.maps.Marker({
+            position: {lat: latt, lng: lngg},
+            map: map,
+            icon: image,
+            shape: shape,
+            title: '[ '+lngg+ ', '+latt+']'
+        
+          });
+
+    }
+    function print_para(x,y){
+    document.getElementById("output").innerHTML =
+    document.getElementById("output").innerHTML +
+    "<br>" +
+    "Point found at x= " +
+    x +
+    " y= " +
+    y;
+    }
+var drone1, drone2,drone3,drone4;
+var i=0,j=0,k=0,l=0;
+    function track_drone1(map,lngg,latt){
+         var image = {
+          url: './drone.png',
+          size: new google.maps.Size(23,23),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(12, 12)
+        };
+        var shape = {
+          coords: [1, 1, 1, 20, 18, 20, 18, 1],
+          type: 'poly'
+        };
+            if(i==0)
+          //  else //drone1.setMap(null);
+            {       
+            i=1;     
+            drone1 = new google.maps.Marker({
+            position: {lat: latt, lng: lngg},
+            map: map,
+            icon: image,
+            shape: shape,
+            title: '[ '+lngg+ ', '+latt+']'
+                });          
+             }
+            else drone1.position= {lat: latt, lng: lngg};
+            
+          
+    }
+    function track_drone2(map,lngg,latt){
+         var image = {
+          url: './drone.png',
+          size: new google.maps.Size(23,23),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(12, 12)
+        };
+        var shape = {
+          coords: [1, 1, 1, 20, 18, 20, 18, 1],
+          type: 'poly'
+        };
+            if(j==0)j=1;
+            else drone2.setMap(null);
+            drone2 = new google.maps.Marker({
+            position: {lat: latt, lng: lngg},
+            map: map,
+            icon: image,
+            shape: shape,
+            title: '[ '+lngg+ ', '+latt+']'
+        
+          });
+    }
+    function track_drone3(map,lngg,latt){
+         var image = {
+          url: './drone.png',
+          size: new google.maps.Size(23,23),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(12, 12)
+        };
+        var shape = {
+          coords: [1, 1, 1, 20, 18, 20, 18, 1],
+          type: 'poly'
+        };
+            if(k==0)k=1;
+            else drone3.setMap(null);
+            drone3 = new google.maps.Marker({
+            position: {lat: latt, lng: lngg},
+            map: map,
+            icon: image,
+            shape: shape,
+            title: '[ '+lngg+ ', '+latt+']'
+        
+          });
+    }
+    function track_drone4(map,lngg,latt){
+         var image = {
+          url: './drone.png',
+          size: new google.maps.Size(23,23),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(12, 12)
+        };
+        var shape = {
+          coords: [1, 1, 1, 20, 18, 20, 18, 1],
+          type: 'poly'
+        };
+            if(l==0)l=1;
+            else drone4.setMap(null);
+            drone4 = new google.maps.Marker({
+            position: {lat: latt, lng: lngg},
+            map: map,
+            icon: image,
+            shape: shape,
+            title: '[ '+lngg+ ', '+latt+']'
+        
+          });
+    }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCie0Us5a4d-fRsFNtOmfrPUdtI74qND6k&callback=initMap">
+    </script>
+  </body>
+</html>
