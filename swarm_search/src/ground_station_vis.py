@@ -17,10 +17,10 @@ from sensor_msgs.msg import NavSatFix
 R1 = 6373000
 sip_const = 2.5  # depends on the height and FOV of the camera
 
-input_square = [[22.314583, 87.308080], [22.314583, 87.308276], [22.314765, 87.308278], [22.314764, 87.308082]]
+input_square = [[22.32175109,87.3048497], [22.3218015, 87.3052322], [22.3221194, 87.3051769], [22.3220840, 87.3047923]]
 global drone_input
 global drone_start
-drone_input = [[22.314577, 87.308265], [22.314579, 87.308355], [22.314577, 87.308243], [22.314577, 87.308205]]
+drone_input = [[22.3217391,87.3049194],[22.3217391,87.3049185],[22.3217391,87.3049154],[22.3217391,87.3049123]]
 
 drone_start = drone_input[0]
 
@@ -371,7 +371,7 @@ def callback0(data):
 def callback1(data):
 
     global drone_input
-    print(data.latitude)
+
     drone_input[1][0] = data.latitude
     drone_input[1][1] = data.longitude
 
@@ -379,6 +379,7 @@ def callback1(data):
 def callback2(data):
 
     global drone_input
+
     drone_input[2][0] = data.latitude
     drone_input[2][1] = data.longitude
 
@@ -386,6 +387,7 @@ def callback2(data):
 def callback3(data):
 
     global drone_input
+    
     drone_input[3][0] = data.latitude
     drone_input[3][1] = data.longitude
 

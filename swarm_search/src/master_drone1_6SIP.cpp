@@ -22,7 +22,8 @@
 
 #include <geographic_msgs/GeoPoseStamped.h>
 
-#include <swarm_search/sip_goal.h>
+// #include <swarm_search/sip_goal.h>
+#include <swarm_search/sip_goal2.h>
 #include <swarm_search/point_list.h>
 #include <swarm_search/local_flags.h>
 
@@ -32,9 +33,9 @@ using namespace std;
 mavros_msgs::State current_state;
 
 double takeoff_alt = 1.5;
-double search_altitude = 2.0;
-double scan_altitude = 5;
-double goal_tolerance = 0.002;
+double search_altitude = 5.0;
+double scan_altitude = 7.0;
+double goal_tolerance = 0.003;
 
 int cnt =0;
 
@@ -61,7 +62,8 @@ geographic_msgs::GeoPoseStamped pose; //target pose - updated in function setDes
 geometry_msgs::Quaternion current_orientation, average_orientation;
 
 swarm_search::point_list arr;
-swarm_search::sip_goal master_goal;
+swarm_search::sip_goal2 master_goal2;
+// swarm_search::sip_goal master_goal;
 swarm_search::local_flags flags;
 
 /*
@@ -90,14 +92,14 @@ void pose_cb(const sensor_msgs::NavSatFix::ConstPtr& msg)
 {
   
   current_pose = *msg;
-  if(counter_1<15)
+  if(counter_1<10)
   {
     initial_takeoff_height += current_pose.altitude;
     counter_1 += 1;
   }
-  else if( counter_1 == 15)
+  else if( counter_1 == 10)
   {
-	initial_takeoff_height = initial_takeoff_height/15;
+	initial_takeoff_height = initial_takeoff_height/10;
 	counter_1+=1;
   }
 
@@ -130,9 +132,14 @@ void orientation_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
 }
 
 
-void callback_sip(const swarm_search::sip_goal::ConstPtr& msg)
+// void callback_sip(const swarm_search::sip_goal::ConstPtr& msg)
+// {
+//   master_goal = *msg;
+// }
+
+void callback_sip2(const swarm_search::sip_goal2::ConstPtr& msg)
 {
-  master_goal = *msg;
+  master_goal2 = *msg;
 }
 
 
@@ -163,6 +170,8 @@ int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
 
   ros::Publisher global_pos_pub = nh.advertise<geographic_msgs::GeoPoseStamped>("/drone1/mavros/setpoint_position/global_to_local", 10);
   ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+
+  //DRONE DIAG FLAGS TO BE ADDED 
 
   // allow the subscribers to initialize
   ROS_INFO("INITIALISING...");
@@ -196,7 +205,7 @@ int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
       }
 
 
-      if( ((delta_to_destination < goal_tolerance) && abs(pose1.pose.position.altitude-current_pose.altitude)<0.5) ||tolerance_time > 150) /////////////////////change this//////////
+      if( ((delta_to_destination < goal_tolerance) && abs(pose1.pose.position.altitude-current_pose.altitude)<0.5) ||tolerance_time > 100) /////////////////////change this//////////
       {
         ROS_INFO("Reached at the target position");  
         ROS_INFO("tolerance time is : %d", tolerance_time);
@@ -279,49 +288,6 @@ void roi_list(const swarm_search::point_list::ConstPtr& msg)
   arr = *msg;
 }
 
-
-int search_main(ros::NodeHandle nh)
-{
-  ros::Publisher flags_pub = nh.advertise<swarm_search::local_flags>("/drone1/flags", 10);
-  int k = 0;
-  flags.search_flag.data = 1;
-  for (int j= 0; j < 5; ++j)
-  {
-    flags_pub.publish(flags);
-    sleep(0.1);
-  }
-
-  for(int i=0;arr.points[i].x!=0;i++)
-  {
-    pose.header.stamp = ros::Time::now();
-    pose.header.frame_id = "target_position";
-    pose.pose.position.latitude = arr.points[i].x;
-    pose.pose.position.longitude = arr.points[i].y;
-    pose.pose.position.altitude = initial_takeoff_height + search_altitude;
-    pose.pose.orientation = current_orientation;
-    k = navigate(nh,pose);
-    sleep(5);
-  }
-
-  flags.search_flag.data = 0; 
-  for (int j= 0; j < 5; ++j)
-  {
-    flags_pub.publish(flags);
-    sleep(0.1);
-  }
-
-  ROS_INFO("Main search is now over");
-  return 0;
-
-  // ek callback hoga yaha se that will take ROI points and go there.
-
-  // multi goal path planning se waypoints leke list me rakaho
-  // ek ek kar ke navigate(pose) : pose update karte raho when reached prev target
-  // sleep for some time so that sufficient frames can be taken
-  // keep checking # of target detection, if = 4 : end search  
-}
-
-
 void scan_main(ros::NodeHandle nh)
 {
 
@@ -329,8 +295,8 @@ void scan_main(ros::NodeHandle nh)
   
   pose.header.stamp = ros::Time::now();
   pose.header.frame_id = "target_position";
-  pose.pose.position.latitude = master_goal.sip_start.x;
-  pose.pose.position.longitude = master_goal.sip_start.y;
+  pose.pose.position.latitude = master_goal2.sip1.x;
+  pose.pose.position.longitude = master_goal2.sip1.y;
   pose.pose.position.altitude = initial_takeoff_height + scan_altitude;
   pose.pose.orientation = current_orientation;
 
@@ -338,9 +304,26 @@ void scan_main(ros::NodeHandle nh)
 	
 	if(x == 1)
 	{
-		ROS_INFO(" SIP Reached ");
+		ROS_INFO(" SIP 1 Reached ");
+		ROS_INFO(" GOING TO SEARCH ");
+	}
+  
+  pose.header.stamp = ros::Time::now();
+  pose.header.frame_id = "target_position";
+  pose.pose.position.latitude = master_goal2.sip1.x;
+  pose.pose.position.longitude = master_goal2.sip1.y;
+  pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+  pose.pose.orientation = current_orientation;
+
+  x = 0;
+  x = navigate(nh, pose); // returns 1 when reached
+	
+	if(x == 1)
+	{
+		ROS_INFO(" SIP 1 Reached - SEARCH HEIGHT");
 		ROS_INFO(" Requesting ROI Scanning to start ");
 
+    flags.search_flag.data = 1; 
     flags.scan_flag.data = 1; 
     for (int j= 0; j < 5; ++j)
     {
@@ -349,86 +332,147 @@ void scan_main(ros::NodeHandle nh)
     } 
     //scanning should start here
 
-  sleep(5);
+   	sleep(2);
+  }
 
 	pose.header.stamp = ros::Time::now();
   pose.header.frame_id = "target_position";
-	pose.pose.position.latitude = master_goal.sip_end.x;
-	pose.pose.position.longitude = master_goal.sip_end.y;
-	pose.pose.position.altitude = initial_takeoff_height + scan_altitude;
-  pose.pose.orientation = current_orientation;
+	pose.pose.position.latitude = master_goal2.sip2.x;
+	pose.pose.position.longitude = master_goal2.sip2.y;
+	pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+	pose.pose.orientation = current_orientation;
 
-  int y = navigate(nh, pose);
+////////////////////
+    x = 0;
+    x = navigate(nh, pose); // returns 1 when reached
 
- 		if(y == 1)
- 		{
-  		ROS_INFO(" Itteration 1 Scanning Complete ");
-  		ROS_INFO(" Requesting ROI Scanning to stop and pass coordinated to Multi-Goal Path Planner ");
+    if(x == 1)
+    {
+      ROS_INFO(" SIP 2 Reached ");
+      ROS_INFO(" Requesting ROI Scanning to continue ");
 
-      flags.scan_flag.data = 0;//ROI_scan_flag;
-      flags.transition_s2s.data = 1; // between scanning and search
+      flags.search_flag.data = 1; 
       for (int j= 0; j < 5; ++j)
       {
         flags_pub.publish(flags);
         sleep(0.1);
-      }
+      } 
 
-      int z = check_ROI_confidence(); // to be done, it analyses features
+    sleep(2);
+    }
 
-    	if (z == 1)
-    	{	
-        ROS_INFO(" Good ROI Confidence - Proceeding to Search and Verify Target ");
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "target_position";
+    pose.pose.position.latitude = master_goal2.sip3.x;
+    pose.pose.position.longitude = master_goal2.sip3.y;
+    pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+    pose.pose.orientation = current_orientation;
 
-        sleep(2);
-        pose.header.stamp = ros::Time::now();
-        pose.header.frame_id = "target_position";
-        pose.pose.position.latitude = master_goal.sip_end.x;
-        pose.pose.position.longitude = master_goal.sip_end.y;
-        pose.pose.position.altitude = initial_takeoff_height + search_altitude;
-        pose.pose.orientation = current_orientation;
+////////////////////
+    x = 0;
+    x = navigate(nh, pose); // returns 1 when reached
 
-        // start Multi-Goal Path Planning and wait for result, also start the detection code
+    if(x == 1)
+    {
+      ROS_INFO(" SIP 3 Reached ");
+      ROS_INFO(" Requesting ROI Scanning to continue ");
 
-        int w = navigate(nh,pose);
-        sleep(1);
+      flags.search_flag.data = 1; 
+      for (int j= 0; j < 5; ++j)
+      {
+        flags_pub.publish(flags);
+        sleep(0.1);
+      } 
 
-        //land(nh);
-        //return;
+    sleep(2);
+    }
 
-        if (w==1)
-        {
-          ROS_INFO(" Reached the Search Height ");
-          flags.transition_s2s.data = 0; //between scanning and search over
-          for (int j= 0; j < 5; ++j)
-          {
-            flags_pub.publish(flags);
-            sleep(0.1);
-          }          
-          int k = search_main(nh); // k = 1 means all detection is completed and all four are found
-          // k = 0 means not all have been found but all roi has been explored
-        }
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "target_position";
+    pose.pose.position.latitude = master_goal2.sip4.x;
+    pose.pose.position.longitude = master_goal2.sip4.y;
+    pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+    pose.pose.orientation = current_orientation;
 
-    	  }
-    		else
-    		{
-    			ROS_INFO(" Poor ROI Confidence - Requesting Recovery Mode 1 ");
-    			flags.recovery1_flag.data = 1;//recovery1_flag = 1;
-    			flags_pub.publish(flags);
-    		}
- 		}
- 		else
- 		{
- 			ROS_INFO(" FAILED TO COMPLETE SCAN_1 ");
- 		}
- 	}
+////////////////////
+    x = 0;
+    x = navigate(nh, pose); // returns 1 when reached
 
- 	else
- 	{
- 		ROS_INFO(" FAILED TO REACH SIP ");
- 	}
+    if(x == 1)
+    {
+      ROS_INFO(" SIP 4 Reached ");
+      ROS_INFO(" Requesting ROI Scanning to continue ");
 
+      flags.search_flag.data = 1; 
+      for (int j= 0; j < 5; ++j)
+      {
+        flags_pub.publish(flags);
+        sleep(0.1);
+      } 
+
+    sleep(2);
+    }
+
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "target_position";
+    pose.pose.position.latitude = master_goal2.sip5.x;
+    pose.pose.position.longitude = master_goal2.sip5.y;
+    pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+    pose.pose.orientation = current_orientation;
+
+////////////////////
+    x = 0;
+    x = navigate(nh, pose); // returns 1 when reached
+
+    if(x == 1)
+    {
+      ROS_INFO(" SIP 5 Reached ");
+      ROS_INFO(" Requesting ROI Scanning to continue ");
+
+      flags.search_flag.data = 1; 
+      for (int j= 0; j < 5; ++j)
+      {
+        flags_pub.publish(flags);
+        sleep(0.1);
+      } 
+
+    sleep(2);
+    }
+
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "target_position";
+    pose.pose.position.latitude = master_goal2.sip6.x;
+    pose.pose.position.longitude = master_goal2.sip6.y;
+    pose.pose.position.altitude = initial_takeoff_height + search_altitude;
+    pose.pose.orientation = current_orientation;
+
+////////////////////
+    x = 0;
+    x = navigate(nh, pose); // returns 1 when reached
+
+    if(x == 1)
+    {
+      ROS_INFO(" SIP 6 Reached ");
+      ROS_INFO(" SCAN AND SEARCH COMPLETE... LANDING! ");
+
+      flags.search_flag.data = 1; 
+      for (int j= 0; j < 5; ++j)
+      {
+        flags_pub.publish(flags);
+        sleep(0.1);
+      } 
+    sleep(2);
+    }
+
+    flags.search_flag.data = 0; 
+    flags.recovery1_flag.data = 1;
+
+    for (int j= 0; j < 5; ++j)
+    {
+      flags_pub.publish(flags);
+      sleep(0.1);
+    } 
   bool z = land(nh);
-  
 }
 
 int main(int argc, char** argv)
@@ -445,9 +489,10 @@ int main(int argc, char** argv)
   ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
   ros::Subscriber localPos = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, orientation_cb);
 
-
   // master and ROI topics
-  ros::Subscriber groundStation_value = nh.subscribe<swarm_search::sip_goal>("master/drone1/ground_msg",10,callback_sip);
+  // ros::Subscriber groundStation_value = nh.subscribe<swarm_search::sip_goal>("master/drone1/ground_msg",10,callback_sip);
+  ros::Subscriber groundStation_value2 = nh.subscribe<swarm_search::sip_goal2>("master/drone1/ground_msg",10,callback_sip2);
+
   ros::Subscriber ROI_points = nh.subscribe<swarm_search::point_list>("/drone1/ROI_flow",10,roi_list);
  
   //Diagonostic Feedback Topic 
@@ -496,14 +541,15 @@ int main(int argc, char** argv)
       ros::spinOnce();
     }
    
-    while( master_goal.takeoff_flag.data != true  && ros::ok() && current_state.mode == "GUIDED")
+    while( master_goal2.takeoff_flag.data != true  && ros::ok() && current_state.mode == "GUIDED")
     {
-      cout <<"**********GUIDED*************" <<int(master_goal.takeoff_flag.data) << endl;
+      cout <<"**********GUIDED*************" <<master_goal2.takeoff_flag.data << endl;
       armed = arm_drone(nh);
-      cout << int(master_goal.takeoff_flag.data) << endl;
+      cout << master_goal2.takeoff_flag.data << endl;
       ROS_INFO("Waiting for the permission to take off");
       ros::spinOnce();
       ros::Duration(0.01).sleep();
+      //wait for permission to take off
     }
   
   ros::ServiceClient takeoff_cl = nh.serviceClient<mavros_msgs::CommandTOL>("/drone1/mavros/cmd/takeoff");

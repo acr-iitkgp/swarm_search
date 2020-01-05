@@ -14,24 +14,16 @@ from mavros_msgs.msg import GlobalPositionTarget
 from sensor_msgs.msg import NavSatFix
 
 
-# R1 = 6373000
-# sip_const = 12.5
-# input_square = [[-35.362600, 149.163974], [-35.362600, 149.165078], [-35.363492, 149.165078], [-35.363492, 149.163974]]
-# global drone_input
-# global drone_start
-# drone_start = drone_input[0]
-# drone_input = [[-35.362383, 149.164811], [-35.362424, 149.164817], [-35.362459, 149.164819], [-35.362498, 149.164825]]
 R1 = 6373000
-sip_const = 2.5  # depends on the height and FOV of the camera
+sip_const = 5.0 # depends on the height and FOV of the camera
 
-input_square = [[22.314583, 87.308080], [22.314583, 87.308276], [22.314765, 87.308278], [22.314764, 87.308082]]
+input_square = [[22.32175109,87.3048497], [22.3218015, 87.3052322], [22.3221194, 87.3051769], [22.3220840, 87.3047923]]
 global drone_input
 global drone_start
-drone_input = [[22.314577, 87.308265], [22.314579, 87.308355], [22.314577, 87.308243], [22.314577, 87.308205]]
+drone_input = [[22.3217391,87.3049194],[22.3217391,87.3049185],[22.3217391,87.3049154],[22.3217391,87.3049123]]
 
 
 drone_start = drone_input[0]
-#drone_input = [[0,0], [0,0], [0,0], [0,0]]
 
 global connected0
 global armed0
@@ -70,7 +62,7 @@ target_3 = sip_goal()
 
 ###############################
 connected0 = 1
-connected1 = 0
+connected1 = 1
 connected2 = 1
 connected3 = 1
 
@@ -365,50 +357,18 @@ def execute():
         start_time = rospy.get_time()
         i = 1
 
-    # target_0 = sip_goal()
-    # target_1 = sip_goal()
-    # target_2 = sip_goal()
-    # target_3 = sip_goal()
-
-    # target_0.takeoff_flag.data = 0
-    # target_1.takeoff_flag.data = 0
-    # target_2.takeoff_flag.data = 0
-    # target_3.takeoff_flag.data = 0
-
-    # gps_sip = compute_gps_sip(input_square,drone_start)
-    # target_sip = assign_sip(gps_sip,drone_input)
-
-    # target_0.sip_start.x = target_sip[0][0][0]
-    # target_0.sip_start.y = target_sip[0][0][1]
-    # target_0.sip_end.x = target_sip[0][1][0]
-    # target_0.sip_end.y = target_sip[0][1][1]
-
-    # target_1.sip_start.x = target_sip[1][0][0]
-    # target_1.sip_start.y = target_sip[1][0][1]
-    # target_1.sip_end.x = target_sip[1][1][0]
-    # target_1.sip_end.y = target_sip[1][1][1]
-
-    # target_2.sip_start.x = target_sip[2][0][0]
-    # target_2.sip_start.y = target_sip[2][0][1]
-    # target_2.sip_end.x = target_sip[2][1][0]
-    # target_2.sip_end.y = target_sip[2][1][1]
-
-    # target_3.sip_start.x = target_sip[3][0][0]
-    # target_3.sip_start.y = target_sip[3][0][1]
-    # target_3.sip_end.x = target_sip[3][1][0]
-    # target_3.sip_end.y = target_sip[3][1][1]
     print("ENtered")
     # target_2.takeoff_flag.data = 1 ####### only for testing
     if((rospy.get_time() - start_time) > 1):
         target_1.takeoff_flag.data = 1
 
-    if((rospy.get_time() - start_time) > 2):
+    if((rospy.get_time() - start_time) > 10):
         target_2.takeoff_flag.data = 1
 
-    if((rospy.get_time() - start_time) > 2):
+    if((rospy.get_time() - start_time) > 20):
         target_3.takeoff_flag.data = 1
 
-    if((rospy.get_time() - start_time) > 20):
+    if((rospy.get_time() - start_time) > 30):
         target_0.takeoff_flag.data = 1
 
     pub0.publish(target_0)
@@ -437,15 +397,10 @@ def calculate_execute():
     target_0.sip_end.x = target_sip[0][1][0]
     target_0.sip_end.y = target_sip[0][1][1]
 
-    # target_1.sip_start.x = target_sip[1][0][0]
-    # target_1.sip_start.y = target_sip[1][0][1]
-    # target_1.sip_end.x = target_sip[1][1][0]
-    # target_1.sip_end.y = target_sip[1][1][1]
-
-    target_1.sip_start.x = 22.3199716
-    target_1.sip_start.y = 87.3013464
-    target_1.sip_end.x = 22.3200810
-    target_1.sip_end.y = 87.3013353
+    target_1.sip_start.x = target_sip[1][0][0]
+    target_1.sip_start.y = target_sip[1][0][1]
+    target_1.sip_end.x = target_sip[1][1][0]
+    target_1.sip_end.y = target_sip[1][1][1]
 
     target_2.sip_start.x = target_sip[2][0][0]
     target_2.sip_start.y = target_sip[2][0][1]
@@ -474,14 +429,12 @@ def state1(data):
     connected1 = data.connected
     #armed1 = data.armed
 
-    # if(connected0 and connected1 and connected2 and connected3 and armed0 and armed1 and armed2 and armed3 and (j < 10)):
-    if(connected1 and armed1 and j < 10):
+    if(connected0 and connected1 and connected2 and connected3 and (j < 10)):
         print("execute: %d" % (j))
         calculate_execute()
         j += 1
 
-    # if(connected0 and connected1 and connected2 and connected3 and armed0 and armed1 and armed2 and armed3 and (j >= 10)):
-    if(connected1 and armed1 and j >= 10):
+    if(connected0 and connected1 and connected2 and connected3 and (j >= 10)):
         print("starting to execute")
         execute()
 
@@ -519,11 +472,6 @@ def main():
     rospy.Subscriber("/drone1/mavros/global_position/global", NavSatFix, callback1)
     rospy.Subscriber("/drone2/mavros/global_position/global", NavSatFix, callback2)
     rospy.Subscriber("/drone3/mavros/global_position/global", NavSatFix, callback3)
-
-    ##########################################
-    # rospy.Subscriber("/drone2/mavros/global_position/global", NavSatFix, callback2)
-    # rospy.Subscriber("/drone2/mavros/state", State, state2)
-    ##########################################
 
     pub0 = rospy.Publisher('master/drone0/ground_msg', sip_goal, queue_size=5)
     pub1 = rospy.Publisher('master/drone1/ground_msg', sip_goal, queue_size=5)

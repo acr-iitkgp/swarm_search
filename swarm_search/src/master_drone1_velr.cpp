@@ -33,8 +33,8 @@ mavros_msgs::State current_state;
 
 double takeoff_alt = 1.5;
 double search_altitude = 2.0;
-double scan_altitude = 5;
-double goal_tolerance = 0.002;
+double scan_altitude = 5.0;
+double goal_tolerance = 0.003;
 
 int cnt =0;
 
@@ -64,6 +64,13 @@ swarm_search::point_list arr;
 swarm_search::sip_goal master_goal;
 swarm_search::local_flags flags;
 
+// for VELOCITY RECOVERY 
+geometry_msgs::PoseStamped local_current_pose;
+geometry_msgs::Pose2D local_target;
+geometry_msgs::Pose2D g2l;
+mavros_msgs::PositionTarget vel_msg;
+geometry_msgs::Twist vel_msg_twist;
+
 /*
 flags.scan_flag.data 
 flags.transition_s2s.data - transition scan to search
@@ -73,6 +80,12 @@ flags.recovery2_flag.data
 flags.wait.data // drone busy
 */
 
+//ros::Rate rate(10.0);
+//ros::NodeHandle nh;
+//ros::Publisher pub2 = nh.advertise<mavros_msgs::PositionTarget>("/drone1/mavros/setpoint_raw/local",50); 
+//ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+//ros::Subscriber local_currentPos1 = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, local_pose_cb);
+//ros::Subscriber local_target_pub = nh.subscribe<geometry_msgs::Pose2D>("/drone1/global_to_local_converted",10, local_targetpose_cb);
 
 
 void state_cb(const mavros_msgs::State::ConstPtr& msg)
@@ -129,6 +142,20 @@ void orientation_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
   }
 }
 
+// VELOCITY RECOVERY ********************
+void local_targetpose_cb(const geometry_msgs::Pose2D::ConstPtr& msg)
+{
+  local_target = *msg;
+  //ROS_INFO("LOCAL x: %f y: %f ", local_target.x, local_target.y);
+}
+
+void local_pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+  local_current_pose = *msg;
+  //ROS_INFO("LOCAL x: %f y: %f ", local_current_pose.pose.position.x, local_current_pose.pose.position.y);
+}
+// VELOCITY RECOVERY ********************
+
 
 void callback_sip(const swarm_search::sip_goal::ConstPtr& msg)
 {
@@ -154,6 +181,88 @@ double haversine(double lat1, double lon1, double lat2, double lon2)
     return rad * c; 
 } 
 
+
+// VELOCITY RECOVERY ********************
+int velocity_recovery(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
+{
+  ros::Rate rate(10.0);
+  ros::Publisher pub2 = nh.advertise<mavros_msgs::PositionTarget>("/drone1/mavros/setpoint_raw/local",50);
+  ros::Publisher pub1 = nh.advertise<geometry_msgs::Twist>("/drone1/mavros/setpoint_velocity/cmd_vel_unstamped",20);
+  ROS_INFO(" VELOCITY RECOVERY MODE CALLED ! ");
+  // ros::Publisher pub2 = nh.advertise<mavros_msgs::PositionTarget>("/drone1/mavros/setpoint_raw/local",50); 
+  // ros::Subscriber currentPos1 = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+  // ros::Subscriber local_currentPos1 = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, local_pose_cb);
+  // ros::Subscriber local_target_pub = nh.subscribe<geometry_msgs::Pose2D>("/drone1/global_to_local_converted",10, local_targetpose_cb);
+
+  int recovery_timeout = 200;
+  int recovery_tolerance_time = 0;
+  float vel_factor = 1;
+  double dir_vec_mag = 0;
+  double dir_vec_x = 0;
+  double dir_vec_y = 0;
+  
+
+  /* pose1.lat \ log  and current_pose.lat \ long bhej ke ... local frame me mangwayo */
+  // IDHAR SUSCRIBER DAALO global_local se values leke target me daaldega 
+  double target_x = local_target.x;
+  double target_y = local_target.y;
+  double curr_x = 0;
+  double curr_y = 0;
+  // if(ros::ok())
+  // {
+  //   cout<<" ROS OK ! "<<ros::ok()<<endl;
+  // } 
+  if(delta_to_destination > goal_tolerance)
+  {
+    cout<<" delta_to_destination TRUE "<<endl;
+  }
+
+  while(ros::ok() && delta_to_destination > goal_tolerance && recovery_tolerance_time < recovery_timeout)
+  {
+	  //ROS_INFO(" WHILE LOOP ME GHUSSA ! ");
+    delta_to_destination = haversine(pose1.pose.position.latitude,pose1.pose.position.longitude,current_pose.latitude,current_pose.longitude);
+    recovery_tolerance_time ++;
+
+    curr_x = local_current_pose.pose.position.x;
+    curr_y = local_current_pose.pose.position.y;
+
+    dir_vec_mag = sqrt((curr_x-target_x)*(curr_x-target_x) + (curr_y-target_y)*(curr_y-target_y)); // altitute ke liye : (curr.z-target.z)*(curr.z-target.z))
+    dir_vec_x = (target_x - curr_x)/(dir_vec_mag + 0.00001);
+    dir_vec_y = (target_y - curr_y)/(dir_vec_mag + 0.00001);
+	
+
+    vel_msg.coordinate_frame=mavros_msgs::PositionTarget::FRAME_BODY_NED;
+    vel_msg.header.frame_id="target_position";   
+
+    vel_msg.type_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+                        mavros_msgs::PositionTarget::IGNORE_PY |
+                        mavros_msgs::PositionTarget::IGNORE_PZ |
+                        mavros_msgs::PositionTarget::IGNORE_AFX |
+                        mavros_msgs::PositionTarget::IGNORE_AFY |
+                        mavros_msgs::PositionTarget::IGNORE_AFZ |
+                        mavros_msgs::PositionTarget::FORCE |
+                        mavros_msgs::PositionTarget::IGNORE_YAW |
+                        mavros_msgs::PositionTarget::IGNORE_YAW_RATE ;
+
+    vel_msg.header.stamp = ros::Time::now();
+
+    vel_msg.velocity.x= dir_vec_x*vel_factor;//v.linear.x;  // *** DIRECTION KA DOUBT HAI -ve try karke dekho
+    vel_msg.velocity.y= dir_vec_y*vel_factor;//v.linear.y;
+    vel_msg.velocity.z= 0;
+		
+		vel_msg_twist.linear.x = dir_vec_y*vel_factor; 
+		vel_msg_twist.linear.y = dir_vec_x*vel_factor;
+		vel_msg_twist.linear.z = 0;
+
+		pub1.publish(vel_msg_twist);
+    ROS_INFO("DELTA_TO_DEST: %f  VELOCITY:: X: %f Y: %f ",delta_to_destination, vel_msg_twist.linear.x, vel_msg_twist.linear.y);
+    //pub2.publish(vel_msg);
+      
+    ros::spinOnce();
+  }
+}
+// VELOCITY RECOVERY ********************
+
 int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
 {
   // the setpoint publishing rate MUST be faster than 2Hz
@@ -162,7 +271,13 @@ int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
   cout << pose1 << endl;
 
   ros::Publisher global_pos_pub = nh.advertise<geographic_msgs::GeoPoseStamped>("/drone1/mavros/setpoint_position/global_to_local", 10);
-  ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+  ros::Publisher cvt_g2l = nh.advertise<geometry_msgs::Pose2D>("/drone1/convert_global_to_local", 10); // change topic
+  ros::Publisher pub1 = nh.advertise<geometry_msgs::Twist>("/drone1/mavros/setpoint_velocity/cmd_vel_unstamped",20);
+  ros::Subscriber local_target_pub = nh.subscribe<geometry_msgs::Pose2D>("/drone1/global_to_local_converted",10, local_targetpose_cb);
+
+  // ros::Publisher pub3 = nh.advertise<geometry_msgs::Twist>("/drone1/mavros/setpoint_velocity/cmd_vel_unstamped",20);
+
+  //DRONE DIAG FLAGS TO BE ADDED 
 
   // allow the subscribers to initialize
   ROS_INFO("INITIALISING...");
@@ -176,7 +291,20 @@ int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
   global_pos_pub.publish(pose1);
 
   int tolerance_time = 0;
+  //////////////////////////////////////// Parameters
+  double target_x = 0;
+  double target_y = 0;
+  double curr_x = 0;
+  double curr_y = 0;
 
+  int recovery_timeout = 200;
+  int recovery_tolerance_time = 0;
+  float vel_factor = 1;
+  double dir_vec_mag = 0;
+  double dir_vec_x = 0;
+  double dir_vec_y = 0;
+  int flag_vel = 0;
+  ///////////////////////////////////
   if(global_pos_pub)
   {  //to reach the destination, it returns 1 when it has reached the destination
     // for (int i=time_tolerance_to_destination; ros::ok() && i>0;--i)
@@ -187,19 +315,58 @@ int navigate(ros::NodeHandle nh, geographic_msgs::GeoPoseStamped pose1)
       ROS_INFO("Delta to Destination: %f  Delta to Altitude: %f ", delta_to_destination, abs(pose1.pose.position.altitude-current_pose.altitude));
 
       pose1.header.stamp = ros::Time::now();
-      global_pos_pub.publish(pose1);
+      if(flag_vel == 0) global_pos_pub.publish(pose1);
 
-      if(abs(delta_to_destination - prev_delta) < 0.000005 && abs(pose1.pose.position.altitude-current_pose.altitude)<0.7)
+      g2l.x = pose1.pose.position.latitude;
+      g2l.y = pose1.pose.position.longitude;
+      cvt_g2l.publish(g2l);
+
+      if(abs(delta_to_destination - prev_delta) < 0.00005 && abs(pose1.pose.position.altitude-current_pose.altitude)<0.7)
       {
         tolerance_time++;
         ROS_INFO("tolerance time is : %d", tolerance_time);
       }
 
+      // if((tolerance_time > 10) && (tolerance_time < 200) && (delta_to_destination > goal_tolerance))
+      if(delta_to_destination < 0.005 &&delta_to_destination > goal_tolerance)
+      {
+       // velocity_recovery(nh,pose1);
+        
+        // vel_msg_twist.linear.x = 0;
+        // vel_msg_twist.linear.y = 0;
+        // vel_msg_twist.linear.z = 0;
 
-      if( ((delta_to_destination < goal_tolerance) && abs(pose1.pose.position.altitude-current_pose.altitude)<0.5) ||tolerance_time > 150) /////////////////////change this//////////
+        // pub3.publish(vel_msg_twist);
+        // ROS_INFO("DELTA_TO_DEST: %f  VELOCITY:: X: %f Y: %f ",delta_to_destination, vel_msg_twist.linear.x, vel_msg_twist.linear.y);
+        ///////////////////////////////////////////////////
+        
+        target_x = local_target.x;
+        cout<<local_target.x<<" "<<local_target.y<<endl;
+        target_y = local_target.y;
+        curr_x = local_current_pose.pose.position.x;
+        curr_y = local_current_pose.pose.position.y;
+
+        dir_vec_mag = sqrt((curr_x-target_x)*(curr_x-target_x) + (curr_y-target_y)*(curr_y-target_y)); // altitute ke liye : (curr.z-target.z)*(curr.z-target.z))
+        dir_vec_x = (target_x - curr_x)/(dir_vec_mag + 0.00001);
+        dir_vec_y = (target_y - curr_y)/(dir_vec_mag + 0.00001);
+
+        vel_msg_twist.linear.x = dir_vec_x*vel_factor; 
+        vel_msg_twist.linear.y = dir_vec_y*vel_factor;
+        vel_msg_twist.linear.z = 0;
+        tolerance_time++;
+        pub1.publish(vel_msg_twist);
+        flag_vel = 1;
+        //ROS_INFO("DELTA_TO_DEST: %f  VELOCITY:: X: %f Y: %f ",delta_to_destination, vel_msg_twist.linear.x, vel_msg_twist.linear.y);
+      }
+      else
+        flag_vel = 0;
+
+
+      if( ((delta_to_destination < goal_tolerance) && abs(pose1.pose.position.altitude-current_pose.altitude)<0.5) )//|| tolerance_time > 200) /////////////////////change this//////////
       {
         ROS_INFO("Reached at the target position");  
         ROS_INFO("tolerance time is : %d", tolerance_time);
+        flag_vel = 0;
         return 1;
       }
 
@@ -219,7 +386,7 @@ bool arm_drone(ros::NodeHandle nh)
   srv_arm_i.request.value = true;
   if (arming_client_i.call(srv_arm_i) && srv_arm_i.response.success){
     ROS_INFO("ARM sent %d", srv_arm_i.response.success);
-    cout << "*******************************************************************" << endl;
+    cout << "**************************************" << endl;
     return 1;
   }
   else
@@ -284,12 +451,6 @@ int search_main(ros::NodeHandle nh)
 {
   ros::Publisher flags_pub = nh.advertise<swarm_search::local_flags>("/drone1/flags", 10);
   int k = 0;
-  flags.search_flag.data = 1;
-  for (int j= 0; j < 5; ++j)
-  {
-    flags_pub.publish(flags);
-    sleep(0.1);
-  }
 
   for(int i=0;arr.points[i].x!=0;i++)
   {
@@ -300,15 +461,31 @@ int search_main(ros::NodeHandle nh)
     pose.pose.position.altitude = initial_takeoff_height + search_altitude;
     pose.pose.orientation = current_orientation;
     k = navigate(nh,pose);
+
+    flags.search_flag.data = 1;
+    for (int j= 0; j < 5; ++j)
+    {
+      flags_pub.publish(flags);
+      sleep(0.1);
+    }
+
     sleep(5);
+
+    flags.search_flag.data = 0; 
+    for (int j= 0; j < 5; ++j)
+    {
+      flags_pub.publish(flags);
+      sleep(0.1);
+    }
+  
+    // int detected_points = 0;
+    // if(detected_points >=4)
+    // {
+    //   return 1;
+    // }
   }
 
-  flags.search_flag.data = 0; 
-  for (int j= 0; j < 5; ++j)
-  {
-    flags_pub.publish(flags);
-    sleep(0.1);
-  }
+  //exit ke baad flag change hona chahiye code me
 
   ROS_INFO("Main search is now over");
   return 0;
@@ -349,16 +526,16 @@ void scan_main(ros::NodeHandle nh)
     } 
     //scanning should start here
 
-  sleep(5);
+   	sleep(5);
 
-	pose.header.stamp = ros::Time::now();
-  pose.header.frame_id = "target_position";
-	pose.pose.position.latitude = master_goal.sip_end.x;
-	pose.pose.position.longitude = master_goal.sip_end.y;
-	pose.pose.position.altitude = initial_takeoff_height + scan_altitude;
-  pose.pose.orientation = current_orientation;
+		pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "target_position";
+		pose.pose.position.latitude = master_goal.sip_end.x;
+		pose.pose.position.longitude = master_goal.sip_end.y;
+		pose.pose.position.altitude = initial_takeoff_height + scan_altitude;
+    pose.pose.orientation = current_orientation;
 
-  int y = navigate(nh, pose);
+   	int y = navigate(nh, pose);
 
  		if(y == 1)
  		{
@@ -409,42 +586,46 @@ void scan_main(ros::NodeHandle nh)
         }
 
     	  }
-    		else
-    		{
-    			ROS_INFO(" Poor ROI Confidence - Requesting Recovery Mode 1 ");
-    			flags.recovery1_flag.data = 1;//recovery1_flag = 1;
-    			flags_pub.publish(flags);
-    		}
+    	else
+    	{
+    		ROS_INFO(" Poor ROI Confidence - Requesting Recovery Mode 1 ");
+    		flags.recovery1_flag.data = 1;//recovery1_flag = 1;
+    		flags_pub.publish(flags);
+    	}
  		}
  		else
  		{
  			ROS_INFO(" FAILED TO COMPLETE SCAN_1 ");
  		}
  	}
-
  	else
  	{
  		ROS_INFO(" FAILED TO REACH SIP ");
  	}
-
   bool z = land(nh);
-  
 }
 
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "drone1_master_node");
   ros::NodeHandle nh;
-
   // the setpoint publishing rate MUST be faster than 2Hz
   ros::Rate rate(20.0);
 
   // mavros topics
   ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>("/drone1/mavros/state", 10, state_cb);
   ros::Publisher global_pos_pub = nh.advertise<geographic_msgs::GeoPoseStamped>("/drone1/mavros/setpoint_position/global_to_local", 10);
-  ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
   ros::Subscriber localPos = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, orientation_cb);
 
+  //currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+  //pub2 = nh.advertise<mavros_msgs::PositionTarget>("/drone1/mavros/setpoint_raw/local",50); 
+  // ros::Subscriber currentPos1 = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+  //local_currentPos1 = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, local_pose_cb);
+  //local_target_pub = nh.subscribe<geometry_msgs::Pose2D>("/drone1/global_to_local_converted",10, local_targetpose_cb);
+	 
+	ros::Subscriber currentPos = nh.subscribe<sensor_msgs::NavSatFix>("/drone1/mavros/global_position/global", 10, pose_cb);
+	ros::Subscriber local_currentPos1 = nh.subscribe<geometry_msgs::PoseStamped>("/drone1/mavros/local_position/pose", 10, local_pose_cb);
+//	ros::Subscriber local_target_pub = nh.subscribe<geometry_msgs::Pose2D>("/drone1/global_to_local_converted",10, local_targetpose_cb);
 
   // master and ROI topics
   ros::Subscriber groundStation_value = nh.subscribe<swarm_search::sip_goal>("master/drone1/ground_msg",10,callback_sip);
@@ -498,12 +679,13 @@ int main(int argc, char** argv)
    
     while( master_goal.takeoff_flag.data != true  && ros::ok() && current_state.mode == "GUIDED")
     {
-      cout <<"**********GUIDED*************" <<int(master_goal.takeoff_flag.data) << endl;
+      cout <<"**********GUIDED*************" <<master_goal.takeoff_flag.data << endl;
       armed = arm_drone(nh);
-      cout << int(master_goal.takeoff_flag.data) << endl;
+      cout << master_goal.takeoff_flag.data << endl;
       ROS_INFO("Waiting for the permission to take off");
       ros::spinOnce();
       ros::Duration(0.01).sleep();
+      //wait for permission to take off
     }
   
   ros::ServiceClient takeoff_cl = nh.serviceClient<mavros_msgs::CommandTOL>("/drone1/mavros/cmd/takeoff");
@@ -527,4 +709,3 @@ int main(int argc, char** argv)
   scan_main(nh);
  }
 }
-
