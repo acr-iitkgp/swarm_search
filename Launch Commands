@@ -1,0 +1,24 @@
+# To setup multimaster: 
+roscore
+rosrun master_sync_fkie master_sync
+rosrun master_discovery_fkie master_discovery _mcast_group:=224.0.0.1
+
+# First visualise the SIP's
+python /home/shrey/catkin_ws/src/UAV_Fleet_Challenge/swarm_search/src/ground_station_vis.py
+# To navigate to SIP
+python /home/shrey/catkin_ws/src/UAV_Fleet_Challenge/swarm_search/src/ground_station_ros.py
+
+Sanity checks:
+1. Once ./drone*.sh launched in odroid check if data comes properly in master. Error may be because of ACM 0/99. Check ls /dev/ttyACM
+2. 
+
+Changes:  
+1. pluma ardupilot_ws/src/UAV_Fleet_Challenge/swarm_search/src/master_drone1.cpp --- Added guided things
+2. apm*.launch check for port even if rostopic list works it might be possible its not the correct port
+3. ensure rostopic echo /drone*/mavros/global_position/global --- GPS data coming properly
+4. etc/hosts should have static ip of masters
+
+
+ground_station_ros:
+state1 - uptill publishing target SIP for all the drones
+state2 - 

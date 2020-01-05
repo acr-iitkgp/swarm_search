@@ -1,0 +1,39 @@
+# Multimaster-fkie Setup
+
+1. Install multimaster-fkie package
+  sudo apt-get install ros-kinetic-multimaster-fkie
+  
+2. Add Hostnames of all the devices involved to the /etc/hosts file to bind the hostnames and IP Addresses. Example:
+  odroid1 192.169.19.1
+  odroid2 192.168.19.2
+  
+3. Enable Multicast
+  To permanently enable the multicast feature, edit the /etc/sysctl.conf file and add the following line, 
+  or uncomment it, if it already exists, and change its default value.
+  
+  net.ipv4.icmp_echo_ignore_broadcasts=0
+4. Restart procps
+  sudo service procps restart
+  
+5. If running in AD-HOC mode then you need to run this command everytime you reboot the system:
+  sudo route add -net 224.0.0.0 netmask 224.0.0.0 wlan0
+
+6. Try running netstat-g to see if wlan0 is listed. ping 224.0.0.1 to see if Multicast is working.
+
+7. Run roscore
+  roscore
+
+8. In a separate terminal, run Master Discovery node:
+  rosrun master_discovery_fkie master_discovery _mcast_group:=224.0.0.1
+
+9. In another terminal run Master Sync node:
+  rosrun master_sync_fkie master_sync
+
+10. In the master sync instance, you can see the names of masters that are being detected.
+
+11. Further Content to be added to ignore topics and select topics.
+
+
+
+
+

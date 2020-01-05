@@ -1,0 +1,41 @@
+**groundstationmaster_init
+
+if takeoff_flag == 1
+	if ittr == 1
+		if scan_flag == 1 
+			goto SIP 1
+				if SIP 1 reached
+				 **ROI_detection start
+					goto SIP 2
+						if SIP 2 reached
+							check ROI Confidence
+								if ROI_confidence > thres
+									goto search height
+									scan_flag = 0
+									**waypoints_from_roi
+										while(scan_flag == 0 || search_complete == 0)
+											goto next points
+											**target_detection 
+	if search_complete == 0
+		ittr = 2
+			goto recovery_scan_height
+			scan_flag = 1
+				**execute recovery2 // half the scan height - 4 waypoints to travel
+					goto recovery_waypoint 1
+						goto recovery_waypoint 2
+							goto recovery_waypoint 3
+								goto recovery_waypoint 4
+
+	int search_complete
+		if true_positive = 4
+			return 1
+		else return 0
+
+
+
+flags.linear.x = scan_flag
+flags.linear.y = between scanning and search
+flags.linear.z = search_flag
+flags.angular.x = targets_found
+flags.angular.y = recovery1_flag
+flags.angular.z = recovery2_flag
